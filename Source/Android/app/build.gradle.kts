@@ -8,6 +8,7 @@ plugins {
 @Suppress("UnstableApiUsage")
 android {
     compileSdk = 37
+    compileSdkMinor = 0
     ndkVersion = "30.0.15729638"
 
     buildFeatures {
