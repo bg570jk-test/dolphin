@@ -1,0 +1,74 @@
+name: Build Dolphin Android with SMS GDB
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Dolphin 2609a source
+        uses: actions/checkout@v4
+        with:
+          repository: dolphin-emu/dolphin
+          ref: 409881c34357d0f105fd473167d15ab0bd9c1628
+          submodules: recursive
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK, NDK and CMake components
+        run: |
+          sdkmanager --install \
+            "platforms;android-37" \
+            "cmake;3.25.0" \
+            "ndk;30.0.15729638"
+
+      - name: Force TCP GDB port 2159 for USA Super Mario Sunshine only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("Source/Core/Core/Core.cpp")
+          source = path.read_text()
+
+          old_socket = "std::string gdb_socket = Config::Get(Config::MAIN_GDB_SOCKET);"
+          new_socket = "std::string gdb_socket; // TCP GDB only in this custom build."
+          if source.count(old_socket) != 1:
+              raise SystemExit("Could not find the expected GDB socket declaration exactly once.")
+          source = source.replace(old_socket, new_socket, 1)
+
+          old_port = "int gdb_port = Config::Get(Config::MAIN_GDB_PORT);"
+          new_port = (
+              "int gdb_port = -1;\n"
+              '        if (SConfig::GetInstance().GetGameID() == "GMSE01")\n'
+              "          gdb_port = 2159;"
+          )
+          if source.count(old_port) != 1:
+              raise SystemExit("Could not find the expected GDB port declaration exactly once.")
+          path.write_text(source.replace(old_port, new_port, 1))
+          print("Patched: GDB TCP port 2159 will be enabled only for game ID GMSE01.")
+          PY
+
+      - name: Build debug APK
+        working-directory: Source/Android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dolphin-android-gdb-debug-apk
+          path: Source/Android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
