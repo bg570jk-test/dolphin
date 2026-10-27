@@ -31,7 +31,7 @@ jobs:
       - name: Install SDK, NDK and CMake components
         run: |
           sdkmanager --install \
-            "platforms;android-37" \
+            "platforms;android-37.0" \
             "cmake;3.25.0" \
             "ndk;30.0.15729638"
 
